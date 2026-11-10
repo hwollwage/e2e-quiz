@@ -73,15 +73,8 @@ jobs:
         run: |
           cp .env.example .env
           php artisan key:generate
-          # Tulis ulang DB config secara bersih agar tidak ada konflik
-          cat >> .env << 'EOF'
-          DB_CONNECTION=pgsql
-          DB_HOST=127.0.0.1
-          DB_PORT=5432
-          DB_DATABASE=gymin_test
-          DB_USERNAME=gymin
-          DB_PASSWORD=secret
-          EOF
+          # Timpa DB config dengan nilai CI — printf agar tidak ada masalah indentasi
+          printf '\nDB_CONNECTION=pgsql\nDB_HOST=127.0.0.1\nDB_PORT=5432\nDB_DATABASE=gymin_test\nDB_USERNAME=gymin\nDB_PASSWORD=secret\n' >> .env
 
       # 9. Jalankan migration + seeder
       - name: Run migrations & seeders
