@@ -29,9 +29,11 @@ jobs:
           --health-retries 5
 
     steps:
+      # 1. Checkout kode
       - name: Checkout
         uses: actions/checkout@v4
 
+      # 2. Setup PHP 8.3
       - name: Setup PHP 8.3
         uses: shivammathur/setup-php@v2
         with:
@@ -39,6 +41,7 @@ jobs:
           extensions: pdo, pdo_pgsql, mbstring, xml, bcmath
           coverage: none
 
+      # 3. Cache Composer
       - name: Cache Composer dependencies
         uses: actions/cache@v4
         with:
@@ -46,45 +49,54 @@ jobs:
           key: composer-${{ hashFiles('composer.lock') }}
           restore-keys: composer-
 
+      # 4. Install Composer packages
       - name: Install PHP dependencies
         run: composer install --no-interaction --prefer-dist --optimize-autoloader
 
+      # 5. Setup Node.js 22
       - name: Setup Node.js 22
         uses: actions/setup-node@v4
         with:
           node-version: '22'
           cache: 'npm'
 
+      # 6. Install npm packages
       - name: Install Node dependencies
         run: npm ci
 
+      # 7. Install Playwright Chromium
       - name: Install Playwright browsers
         run: npx playwright install chromium --with-deps
 
-      - name: Install @types/node
-        run: npm install --save-dev @types/node@22
+      # 8. Siapkan .env untuk CI
       - name: Prepare .env
         run: |
           cp .env.example .env
-          sed -i 's|^DB_CONNECTION=.*|DB_CONNECTION=pgsql|'      .env
-          sed -i 's|^# DB_HOST=.*|DB_HOST=127.0.0.1|'           .env
-          sed -i 's|^# DB_PORT=.*|DB_PORT=5432|'                 .env
-          sed -i 's|^# DB_DATABASE=.*|DB_DATABASE=gymin_test|'   .env
-          sed -i 's|^# DB_USERNAME=.*|DB_USERNAME=gymin|'        .env
-          sed -i 's|^# DB_PASSWORD=.*|DB_PASSWORD=secret|'       .env
           php artisan key:generate
+          # Tulis ulang DB config secara bersih agar tidak ada konflik
+          cat >> .env << 'EOF'
+          DB_CONNECTION=pgsql
+          DB_HOST=127.0.0.1
+          DB_PORT=5432
+          DB_DATABASE=gymin_test
+          DB_USERNAME=gymin
+          DB_PASSWORD=secret
+          EOF
 
+      # 9. Jalankan migration + seeder
       - name: Run migrations & seeders
         run: php artisan migrate --force && php artisan db:seed --force
 
+      # 10. Build frontend assets
       - name: Build Vite assets
         run: npm run build
 
+      # 11. Jalankan Laravel dev server di background
       - name: Start Laravel server
         run: php artisan serve --host=127.0.0.1 --port=8000 &
-        env:
-          APP_ENV: testing
 
+      # 12. Tunggu server siap
+      - name: Wait for server
         run: |
           for i in $(seq 1 15); do
             curl -sf http://127.0.0.1:8000 > /dev/null && echo "Server ready" && break
@@ -92,12 +104,14 @@ jobs:
             sleep 2
           done
 
+      # 13. Jalankan Playwright E2E tests
       - name: Run Playwright tests
         run: npm run test:e2e
         env:
           BASE_URL: http://127.0.0.1:8000
-          CI: true
+          CI: "true"
 
+      # 14. Upload laporan HTML sebagai artefak (selalu, biar bisa dilihat saat gagal)
       - name: Upload Playwright report
         if: always()
         uses: actions/upload-artifact@v4
